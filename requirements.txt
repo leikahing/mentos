@@ -1,5 +1,5 @@
+aiohttp==3.8.1
 fastapi==0.78.0
-requests==2.27.1
 python-multipart==0.0.5
 slack-sdk==3.16.2
 uvicorn[standard]==0.17.6
