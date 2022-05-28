@@ -1,17 +1,16 @@
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional
 
 import argparse
-import asyncio
-import base64
 
 import aiohttp
 
-from fastapi import Depends, FastAPI, Form, Request, Response, status
+from fastapi import Depends, FastAPI, Form, Response, status
 from pydantic import BaseModel, BaseSettings, HttpUrl
 
 app = FastAPI()
+
 
 def slack_body(cls):
     cls.__signature__ = cls.__signature__.replace(
@@ -22,6 +21,7 @@ def slack_body(cls):
     )
     return cls
 
+
 class Settings(BaseSettings):
     freshdesk_url: HttpUrl
     freshdesk_api_key: str
@@ -31,33 +31,41 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
 
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-    
+
+class Requester(BaseModel):
+    """This is the 'requester' block that is returned when tickets are
+    requested with the '?include=requester' param"""
+    id: int
+    name: str
+    email: str
+
 class TicketInfo(BaseModel):
     """
     Model for the FreshDesk API's ticket info. Doesn't fully capture everything
     in the response because there are some additional fields that don't really
     matter for the purpose like conversations.
-    
+
     See API: https://api.freshservice.com/#view_a_ticket"""
     cc_emails: List[str]
     fwd_emails: List[str]
     reply_cc_emails: List[str]
     fr_escalated: bool
     spam: bool
-    email_config_id: Union[int, None]
-    group_id: Union[int, None]
+    email_config_id: Optional[int]
+    group_id: Optional[int]
     priority: int
     requester_id: int
-    responder_id: Union[int, None]
+    responder_id: Optional[int]
     source: int
     status: int
     subject: str
-    to_emails: Union[List[str], None]
+    to_emails: Optional[List[str]]
     sla_policy_id: int
-    department_id: Union[int, None]
+    department_id: Optional[int]
     id: int
     type: str
     due_by: datetime
@@ -69,10 +77,12 @@ class TicketInfo(BaseModel):
     updated_at: datetime
     urgency: int
     impact: int
-    category: Union[str, None]
-    sub_category: Union[str, None]
-    item_category: Union[str, None]
+    category: Optional[str]
+    sub_category: Optional[str]
+    item_category: Optional[str]
     deleted: bool
+    requester: Optional[Requester]
+
 
 @slack_body
 class SlackPayload(BaseModel):
@@ -96,19 +106,53 @@ class SlackPayload(BaseModel):
     trigger_id: str
     api_app_id: str
 
-def format_message() -> Dict[str, Any]:
-    pass
+
+def format_message(ticket: TicketInfo) -> Dict[str, Any]:
+    divider = { "type": "divider" }
+    header = {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": ticket.subject
+            },
+    }
+
+    requester = ticket.requester.name if ticket.requester else ticket.requester_id
+    due_by = int(ticket.due_by.timestamp())
+    fallback_due_by = ticket.due_by.strftime("%c")
+
+    sections = {
+        "type": "section",
+        "fields": [
+            {
+                "type": "mrkdwn",
+                "text": f"*Requester:*\n{requester}"
+            },
+            {
+                "type": "mrkdwn",
+                "text": f"*Due By:*\n<!date^{due_by}^{{date}} {{time}}|{fallback_due_by}>"
+            },
+            {
+                "type": "mrkdwn",
+                "text": f"*Description*:\n{ticket.description_text}"
+            }
+        ]
+    }
+    return {"blocks": [header, divider, sections]}
+
 
 def get_ticket_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Parse ticket request command")
+    parser = argparse.ArgumentParser(description="Parse ticket request")
     parser.add_argument("-v", dest="verbose", action="store_true")
     parser.add_argument("ticket")
     return parser
+
 
 @app.get("/")
 async def index(settings: Settings = Depends(get_settings)):
     """Returns info about this bot."""
     return {"name": "mentos-bot", "version": "1.0"}
+
 
 @app.post("/request")
 async def ticket_info(
@@ -116,22 +160,22 @@ async def ticket_info(
         settings: Settings = Depends(get_settings)):
     """This responds to the following Slack command:
 
-    /request [-v] TICKET 
+    /request [-v] TICKET
 
     * -v - verbose mode, return more info about the ticket
     * TICKET - a number/identifier for the FreshDesk ticket"""
     parser = get_ticket_parser()
     command_args = parser.parse_args(payload.text.split())
-    
+
     ticket_api_url = f"{settings.freshdesk_url}/api/v2/tickets"
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{ticket_api_url}/{command_args.ticket}",
-                headers={"content-type": "application/json"},
-                auth=aiohttp.BasicAuth(settings.freshdesk_api_key, "X")
+        async with session.get(f"{ticket_api_url}/{command_args.ticket}?include=requester",
+                    headers={"content-type": "application/json"},
+                    auth=aiohttp.BasicAuth(settings.freshdesk_api_key, "X")
         ) as ticket_rsp:
             js = await ticket_rsp.json()
             info = TicketInfo(**js["ticket"])
-            # Now send to the Slack response URL
-            await session.post(payload.response_url, json={"text": info.subject})
+            # Now send to the Slack response URL with block layout
+            await session.post(payload.response_url, json=format_message(info))
 
             return Response(status_code=status.HTTP_200_OK)
