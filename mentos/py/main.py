@@ -1,15 +1,14 @@
 from datetime import datetime
-from functools import cache
-from typing import List, Union
+from functools import lru_cache
+from typing import Any, Dict, List, Union
 
 import argparse
 import asyncio
 import base64
-import logging
 
 import aiohttp
 
-from fastapi import Depends, FastAPI, Form
+from fastapi import Depends, FastAPI, Form, Request, Response, status
 from pydantic import BaseModel, BaseSettings, HttpUrl
 
 app = FastAPI()
@@ -32,14 +31,15 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
 
-@cache
-def get_settings():
+@lru_cache
+def get_settings() -> Settings:
     return Settings()
     
-
 class TicketInfo(BaseModel):
     """
-    Model for the FreshDesk API's ticket info.
+    Model for the FreshDesk API's ticket info. Doesn't fully capture everything
+    in the response because there are some additional fields that don't really
+    matter for the purpose like conversations.
     
     See API: https://api.freshservice.com/#view_a_ticket"""
     cc_emails: List[str]
@@ -78,13 +78,14 @@ class TicketInfo(BaseModel):
 class SlackPayload(BaseModel):
     """This payload is documented in Slack's command API.
 
+    It ignores some fields that don't particularly matter like whether or not
+    this is running an Enterprise Slack.
+
     See:
     https://api.slack.com/interactivity/slash-commands#app_command_handling"""
     token: str
     team_id: str
     team_domain: str
-    enterprise_id: str
-    enterprise_name: str
     channel_id: str
     channel_name: str
     user_id: str
@@ -95,7 +96,10 @@ class SlackPayload(BaseModel):
     trigger_id: str
     api_app_id: str
 
-def get_ticket_parser():
+def format_message() -> Dict[str, Any]:
+    pass
+
+def get_ticket_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Parse ticket request command")
     parser.add_argument("-v", dest="verbose", action="store_true")
     parser.add_argument("ticket")
@@ -117,16 +121,17 @@ async def ticket_info(
     * -v - verbose mode, return more info about the ticket
     * TICKET - a number/identifier for the FreshDesk ticket"""
     parser = get_ticket_parser()
-    command_args = parser.parse_args(payload.command.split())
+    command_args = parser.parse_args(payload.text.split())
     
-    headers = {
-        "content-type": "application/json",
-    }
-    async with aiohttp.ClientSession(
-            f"{settings.freshdesk_url}",
-            headers=headers,
-            auth=aiohttp.BasicAuth(settings.freshdesk_api_key, "X")
-    ) as session:
-        async with session.get(f"/api/v2/tickets/{command_args.ticket}") as rsp:
-            js = await rsp.json()
-            return TicketInfo(**js["ticket"])
+    ticket_api_url = f"{settings.freshdesk_url}/api/v2/tickets"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{ticket_api_url}/{command_args.ticket}",
+                headers={"content-type": "application/json"},
+                auth=aiohttp.BasicAuth(settings.freshdesk_api_key, "X")
+        ) as ticket_rsp:
+            js = await ticket_rsp.json()
+            info = TicketInfo(**js["ticket"])
+            # Now send to the Slack response URL
+            await session.post(payload.response_url, json={"text": info.subject})
+
+            return Response(status_code=status.HTTP_200_OK)
