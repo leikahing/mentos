@@ -1,25 +1,59 @@
 from datetime import datetime
+from enum import Enum
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 import argparse
+import hashlib
+import hmac
+import logging
+import time
+import urllib.parse
 
 import aiohttp
 
-from fastapi import Depends, FastAPI, Form, Response, status
+from fastapi import Depends, FastAPI, Request, Response, status
 from pydantic import BaseModel, BaseSettings, HttpUrl
 
 app = FastAPI()
 
+logger = logging.getLogger("uvicorn")
+logger.setLevel("DEBUG")
 
-def slack_body(cls):
-    cls.__signature__ = cls.__signature__.replace(
-        parameters=[
-            arg.replace(default=Form(...))
-            for arg in cls.__signature__.parameters.values()
-        ]
-    )
-    return cls
+class VerificationStatus(Enum):
+    VERIFIED = 1
+    BAD_SIGNATURE = 2
+    OUTDATED_REQUEST =  3
+
+
+def verify_signature(
+    secret: str,
+    body: str,
+    req_sig: str,
+    req_ts: int
+) -> VerificationStatus:
+    """Perform request signature verification.
+
+    Requires the signing secret from your Slack application.
+    The other parameters are the raw request body (from Slack), request
+    signature, and  the request timestamp.
+
+    See https://api.slack.com/authentication/verifying-requests-from-slack"""
+    if abs(int(time.time()) - req_ts) > 300:
+        # request timestamp is old, so ignore this request as it could be
+        # a replay
+        VerificationStatus.OUTDATED_REQUEST
+
+    bs = f"v0:{req_ts}:{body}"
+    hsh = hmac.new(
+            bytes(secret, "utf-8"),
+            msg=bytes(bs, "utf-8"),
+            digestmod=hashlib.sha256).hexdigest()
+
+    signature = f"v0={hsh}"
+    if hmac.compare_digest(signature, req_sig):
+        return VerificationStatus.VERIFIED
+    return VerificationStatus.BAD_SIGNATURE
 
 
 class Settings(BaseSettings):
@@ -36,12 +70,14 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     return Settings()
 
+
 class Requester(BaseModel):
     """This is the 'requester' block that is returned when tickets are
     requested with the '?include=requester' param"""
     id: int
     name: str
     email: str
+
 
 class TicketInfo(BaseModel):
     """
@@ -84,7 +120,6 @@ class TicketInfo(BaseModel):
     requester: Optional[Requester]
 
 
-@slack_body
 class SlackPayload(BaseModel):
     """This payload is documented in Slack's command API.
 
@@ -107,43 +142,65 @@ class SlackPayload(BaseModel):
     api_app_id: str
 
 
-def format_message(ticket: TicketInfo) -> Dict[str, Any]:
-    divider = { "type": "divider" }
+def gen_message(
+    ticket: TicketInfo,
+    verbose: bool = False,
+    public: bool = False
+) -> Dict[str, Any]:
+    divider = {"type": "divider"}
     header = {
-            "type": "header",
-            "text": {
-                "type": "plain_text",
-                "text": ticket.subject
-            },
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": ticket.subject.strip()
+        },
     }
 
-    requester = ticket.requester.name if ticket.requester else ticket.requester_id
-    due_by = int(ticket.due_by.timestamp())
-    fallback_due_by = ticket.due_by.strftime("%c")
+    def create_date(date: datetime, title: str) -> str:
+        ts = int(date.timestamp())
+        fallback = date.strftime("%c")
+        return f"*{title}:*\n<!date^{ts}^{{date}} {{time}}|{fallback}>"
+
+    created = create_date(ticket.created_at, "Created")
+    updated = create_date(ticket.updated_at, "Updated")
+    due = create_date(ticket.due_by, "Due By")
 
     sections = {
         "type": "section",
         "fields": [
             {
                 "type": "mrkdwn",
-                "text": f"*Requester:*\n{requester}"
+                "text": created
             },
             {
                 "type": "mrkdwn",
-                "text": f"*Due By:*\n<!date^{due_by}^{{date}} {{time}}|{fallback_due_by}>"
+                "text": due
             },
             {
                 "type": "mrkdwn",
-                "text": f"*Description*:\n{ticket.description_text}"
+                "text": updated
             }
         ]
     }
-    return {"blocks": [header, divider, sections]}
+
+    if verbose:
+        sections["fields"].append(
+            {
+                "type": "mrkdwn",
+                "text": f"*Description*:\n{ticket.description_text.strip()}"
+            }
+        )
+
+    return {
+        "response_type": "in_channel" if public else "ephemeral",
+        "blocks": [header, divider, sections]
+    }
 
 
 def get_ticket_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Parse ticket request")
     parser.add_argument("-v", dest="verbose", action="store_true")
+    parser.add_argument("-p", dest="public", action="store_true")
     parser.add_argument("ticket")
     return parser
 
@@ -156,26 +213,45 @@ async def index(settings: Settings = Depends(get_settings)):
 
 @app.post("/request")
 async def ticket_info(
-        payload: SlackPayload = Depends(SlackPayload),
-        settings: Settings = Depends(get_settings)):
+    request: Request,
+    settings: Settings = Depends(get_settings)
+) -> Response:
     """This responds to the following Slack command:
-
     /request [-v] TICKET
 
     * -v - verbose mode, return more info about the ticket
+    * -p - show the information publicly in requesting channel
     * TICKET - a number/identifier for the FreshDesk ticket"""
-    parser = get_ticket_parser()
-    command_args = parser.parse_args(payload.text.split())
 
-    ticket_api_url = f"{settings.freshdesk_url}/api/v2/tickets"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"{ticket_api_url}/{command_args.ticket}?include=requester",
-                    headers={"content-type": "application/json"},
-                    auth=aiohttp.BasicAuth(settings.freshdesk_api_key, "X")
-        ) as ticket_rsp:
-            js = await ticket_rsp.json()
-            info = TicketInfo(**js["ticket"])
-            # Now send to the Slack response URL with block layout
-            await session.post(payload.response_url, json=format_message(info))
+    body = (await request.body()).decode("utf-8")
+    req_ts = int(request.headers["X-Slack-Request-Timestamp"])
+    req_sig = request.headers["X-Slack-Signature"]
+    secret = settings.slack_signing_secret
 
-            return Response(status_code=status.HTTP_200_OK)
+    sig_ver = verify_signature(secret, body, req_sig, req_ts)
+    if sig_ver in (VerificationStatus.VERIFIED,):
+        qsd = dict(urllib.parse.parse_qsl(body))
+        payload = SlackPayload.parse_obj(qsd)
+        parser = get_ticket_parser()
+        command_args = parser.parse_args(payload.text.split())
+
+        ticket_api_url = f"{settings.freshdesk_url}/api/v2/tickets"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{ticket_api_url}/{command_args.ticket}?include=requester",
+                headers={"content-type": "application/json"},
+                auth=aiohttp.BasicAuth(settings.freshdesk_api_key, "X")
+            ) as ticket_rsp:
+                js = await ticket_rsp.json()
+                info = TicketInfo(**js["ticket"])
+                await session.post(
+                    payload.response_url,
+                    json=gen_message(info, command_args.verbose, command_args.public)
+                )
+
+        return Response(status_code=status.HTTP_200_OK)
+    else:
+        if sig_ver == VerificationStatus.BAD_SIGNATURE:
+            return {"text": "Slack API call could not be verified."}
+        else:
+            return {"text": "Expired Slack call received. Possible replay attack seen."}
