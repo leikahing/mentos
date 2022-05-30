@@ -20,10 +20,11 @@ app = FastAPI()
 logger = logging.getLogger("uvicorn")
 logger.setLevel("DEBUG")
 
+
 class VerificationStatus(Enum):
     VERIFIED = 1
     BAD_SIGNATURE = 2
-    OUTDATED_REQUEST =  3
+    OUTDATED_REQUEST = 3
 
 
 def verify_signature(
@@ -60,6 +61,7 @@ class Settings(BaseSettings):
     freshdesk_url: HttpUrl
     freshdesk_api_key: str
     slack_signing_secret: str
+    limit_users: bool = True
     approved_users: List[str]
 
     class Config:
@@ -83,7 +85,7 @@ class TicketInfo(BaseModel):
     """
     Model for the FreshDesk API's ticket info. Doesn't fully capture everything
     in the response because there are some additional fields that don't really
-    matter for the purpose like conversations.
+    matter for the purpose, like conversations.
 
     See API: https://api.freshservice.com/#view_a_ticket"""
     cc_emails: List[str]
@@ -165,7 +167,7 @@ def gen_message(
     updated = create_date(ticket.updated_at, "Updated")
     due = create_date(ticket.due_by, "Due By")
 
-    sections = {
+    date_sections = {
         "type": "section",
         "fields": [
             {
@@ -184,16 +186,20 @@ def gen_message(
     }
 
     if verbose:
-        sections["fields"].append(
-            {
+        description = {
+            "type": "section",
+            "text": {
                 "type": "mrkdwn",
                 "text": f"*Description*:\n{ticket.description_text.strip()}"
             }
-        )
+        }
+        blocks = [header, description, divider, date_sections]
+    else:
+        blocks = [header, divider, date_sections]
 
     return {
         "response_type": "in_channel" if public else "ephemeral",
-        "blocks": [header, divider, sections]
+        "blocks": blocks
     }
 
 
@@ -211,13 +217,13 @@ async def index(settings: Settings = Depends(get_settings)):
     return {"name": "mentos-bot", "version": "1.0"}
 
 
-@app.post("/request")
+@app.post("/ticket")
 async def ticket_info(
     request: Request,
     settings: Settings = Depends(get_settings)
 ) -> Response:
     """This responds to the following Slack command:
-    /request [-v] TICKET
+    /COMMAND [-v] [-p] TICKET
 
     * -v - verbose mode, return more info about the ticket
     * -p - show the information publicly in requesting channel
@@ -232,6 +238,12 @@ async def ticket_info(
     if sig_ver in (VerificationStatus.VERIFIED,):
         qsd = dict(urllib.parse.parse_qsl(body))
         payload = SlackPayload.parse_obj(qsd)
+
+        if payload.user_name not in settings.approved_users:
+            return {
+                "text": f"Sorry, user {payload.user_name} isn't authorized."
+            }
+
         parser = get_ticket_parser()
         command_args = parser.parse_args(payload.text.split())
 
@@ -242,11 +254,16 @@ async def ticket_info(
                 headers={"content-type": "application/json"},
                 auth=aiohttp.BasicAuth(settings.freshdesk_api_key, "X")
             ) as ticket_rsp:
+                if 400 <= ticket_rsp.status < 500:
+                    return {"text": f"Ticket {command_args.ticket} not found."}
+
                 js = await ticket_rsp.json()
                 info = TicketInfo(**js["ticket"])
                 await session.post(
                     payload.response_url,
-                    json=gen_message(info, command_args.verbose, command_args.public)
+                    json=gen_message(
+                        info, command_args.verbose, command_args.public
+                    )
                 )
 
         return Response(status_code=status.HTTP_200_OK)
@@ -254,4 +271,6 @@ async def ticket_info(
         if sig_ver == VerificationStatus.BAD_SIGNATURE:
             return {"text": "Slack API call could not be verified."}
         else:
-            return {"text": "Expired Slack call received. Possible replay attack seen."}
+            return {
+                "text": "Old Slack call received. Possible replay attack seen!"
+            }

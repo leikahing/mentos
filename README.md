@@ -2,6 +2,20 @@
 
 This is an application made by personal request - it handles some FreshDesk functionality for Slack.
 
+## Supported Endpoints
+
+```
+SERVER_URL/ticket
+
+Command Arguments: -v -p TICKET_ID
+
+* -v enables verbose mode, which includes additional ticket information
+* -p enables public message mode - the resultant ticket info is publicly displayed in Slack.
+* TICKET_ID is the ticket ID you want from freshdesk
+
+
+```
+
 ## Configuration
 
 The bot reads from an environment file called `.env`. A sample configuration titled `.env.sample` is provided that lists all the supported settings.
