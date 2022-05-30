@@ -26,15 +26,15 @@ The bot reads from an environment file called `.env`. A sample configuration tit
 
 A full description of the settings is as follows...
 
-```
+
 | Setting Name | Description |
-| - | - |
+| ------ | ------ |
 | `FRESHDESK_URL` | Your subdomain for freshservice.com |
 | `FRESHDESK_API_KEY` | API key to access the Freshdesk API |
 | `SLACK_SIGNING_SECRET` | The signing secret from your Slack app management page for verifying that messages are actually coming from Slack |
-| `LIMIT_USERS` | Defaults to `true` if not specified. This allows you to specify `APPROVED_USERS` and provide a list of users who can send commands to this app.
-| `APPROVED_USERS` | A JSON list of usernames that are allowed to use this bot. Enforced if `LIMIT_USERS=true`.
-```
+| `LIMIT_USERS` | Defaults to `true` if not specified. This allows you to specify `APPROVED_USERS` and provide a list of users who can send commands to this app |
+| `APPROVED_USERS` | A JSON list of usernames that are allowed to use this bot. Enforced if `LIMIT_USERS=true` |
+
 
 ## Installing and Running - Production
 
