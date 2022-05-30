@@ -1,5 +1,9 @@
 # mentos bot
 
+
+https://user-images.githubusercontent.com/809026/171041460-adba33da-1c68-4353-bb62-a380acbb85b1.mp4
+
+
 This is an application made by personal request - it handles some FreshDesk functionality for Slack.
 
 ## Supported Endpoints
