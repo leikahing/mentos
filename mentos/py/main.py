@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import hmac
 import logging
+import os
 import time
 import urllib.parse
 
@@ -17,7 +18,7 @@ from pydantic import BaseModel, BaseSettings, HttpUrl
 
 app = FastAPI()
 
-logger = logging.getLogger("uvicorn")
+logger = logging.getLogger("gunicorn.error")
 logger.setLevel("DEBUG")
 
 
@@ -230,8 +231,11 @@ async def ticket_info(
     * TICKET - a number/identifier for the FreshDesk ticket"""
 
     body = (await request.body()).decode("utf-8")
-    req_ts = int(request.headers["X-Slack-Request-Timestamp"])
-    req_sig = request.headers["X-Slack-Signature"]
+    logger.debug(request.headers)
+    req_ts = int(request.headers["x-slack-request-timestamp"])
+    logger.debug(f"x-slack-request-timestamp={req_ts}")
+    req_sig = request.headers["x-slack-signature"]
+    logger.debug(f"x-slack-signature={req_sig}")
     secret = settings.slack_signing_secret
 
     sig_ver = verify_signature(secret, body, req_sig, req_ts)
