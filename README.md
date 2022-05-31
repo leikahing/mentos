@@ -58,6 +58,10 @@ cp .env.sample .env
 gunicorn mentos.py.main:app -w 4 -k uvicorn.workers.UvicornWorker
 ```
 
+## Caveats
+
+* Use this with [Slack's apps](https://slack.com/apps) feature, as the this does not work with legacy Slack integrations
+
 ## Development
 
 I'd recommend running uvicorn with `--reload` like so:
