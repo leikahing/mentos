@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type, TypeVar
 
 import argparse
 import hashlib
@@ -13,13 +13,11 @@ import urllib.parse
 
 import aiohttp
 
+from async_lru import alru_cache
 from fastapi import Depends, FastAPI, Request, Response, status
 from pydantic import BaseModel, BaseSettings, HttpUrl
 
-app = FastAPI()
-
-logger = logging.getLogger("gunicorn.error")
-logger.setLevel("DEBUG")
+T = TypeVar("T")
 
 
 class VerificationStatus(Enum):
@@ -69,11 +67,6 @@ class Settings(BaseSettings):
         env_file = ".env"
 
 
-@lru_cache
-def get_settings() -> Settings:
-    return Settings()
-
-
 class Requester(BaseModel):
     """This is the 'requester' block that is returned when tickets are
     requested with the '?include=requester' param"""
@@ -121,6 +114,87 @@ class TicketInfo(BaseModel):
     item_category: Optional[str]
     deleted: bool
     requester: Optional[Requester]
+
+
+class AgentGroup(BaseModel):
+    id: int
+    name: str
+    description: str
+
+
+class Agent(BaseModel):
+    id: int
+    active: bool
+    email: str
+    first_name: str
+    last_name: str
+
+
+class Department(BaseModel):
+    id: int
+    name: str
+    description: str
+    header_user_id: int
+    prime_user_id: int
+
+
+class MissingResourceException(Exception):
+    """Exception for some missing API resource"""
+
+
+class FreshDeskClient:
+    base_url: str = None
+    api_key: str = None
+    session: aiohttp.ClientSession = None
+
+    def configure(self, url: str, api_key: str):
+        self.session = aiohttp.ClientSession()
+        self.base_url = url
+        self.api_key = api_key
+
+    async def cleanup(self):
+        logger.info(self.get_agent.cache_info())
+        logger.info(self.get_ticket.cache_info())
+        await self.session.close()
+
+    async def _api_fetch(self, resource: str, gen_type: Type[T]) -> T:
+        api_url = f"{self.base_url}/api/v2/{resource}"
+        headers = {"content-type": "application/json"}
+        async with self.session.get(
+            api_url,
+            headers=headers,
+            auth=aiohttp.BasicAuth(self.api_key, "X")
+        ) as rsp:
+            if 400 <= rsp.status < 500:
+                raise MissingResourceException
+
+            js = await rsp.json()
+            return gen_type(**next(iter(js.values())))
+
+    @alru_cache
+    async def get_agent(self, agent_id: int):
+        resource = f"agents/{agent_id}"
+        return await self._api_fetch(resource, Agent)
+
+    @alru_cache
+    async def get_agent_group(self, agent_group: int):
+        resource = f"groups/{agent_group}"
+        return await self._api_fetch(resource, AgentGroup)
+
+    @alru_cache
+    async def get_department(self, department_id: int):
+        resource = f"departments/{department_id}"
+        return await self._api_fetch(resource, Department)
+
+    @alru_cache
+    async def get_ticket(self, ticket_id: str) -> TicketInfo:
+        resource = f"tickets/{ticket_id}"
+        return await self._api_fetch(resource, TicketInfo)
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
 
 
 class SlackPayload(BaseModel):
@@ -212,6 +286,24 @@ def get_ticket_parser() -> argparse.ArgumentParser:
     return parser
 
 
+app = FastAPI()
+freshdesk = FreshDeskClient()
+
+logger = logging.getLogger("uvicorn")
+logger.setLevel("DEBUG")
+
+
+@app.on_event("startup")
+def startup():
+    settings = get_settings()
+    freshdesk.configure(settings.freshdesk_url, settings.freshdesk_api_key)
+
+
+@app.on_event("shutdown")
+async def shutdown_app():
+    await freshdesk.cleanup()
+
+
 @app.get("/")
 async def index(settings: Settings = Depends(get_settings)):
     """Returns info about this bot."""
@@ -231,11 +323,12 @@ async def ticket_info(
     * TICKET - a number/identifier for the FreshDesk ticket"""
 
     body = (await request.body()).decode("utf-8")
-    logger.debug(request.headers)
+    logger.info(request.headers)
+    logger.info(body)
     req_ts = int(request.headers["x-slack-request-timestamp"])
-    logger.debug(f"x-slack-request-timestamp={req_ts}")
+    logger.info(f"x-slack-request-timestamp={req_ts}")
     req_sig = request.headers["x-slack-signature"]
-    logger.debug(f"x-slack-signature={req_sig}")
+    logger.info(f"x-slack-signature={req_sig}")
     secret = settings.slack_signing_secret
 
     sig_ver = verify_signature(secret, body, req_sig, req_ts)
@@ -251,26 +344,12 @@ async def ticket_info(
         parser = get_ticket_parser()
         command_args = parser.parse_args(payload.text.split())
 
-        ticket_api_url = f"{settings.freshdesk_url}/api/v2/tickets"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{ticket_api_url}/{command_args.ticket}?include=requester",
-                headers={"content-type": "application/json"},
-                auth=aiohttp.BasicAuth(settings.freshdesk_api_key, "X")
-            ) as ticket_rsp:
-                if 400 <= ticket_rsp.status < 500:
-                    return {"text": f"Ticket {command_args.ticket} not found."}
-
-                js = await ticket_rsp.json()
-                info = TicketInfo(**js["ticket"])
-                await session.post(
-                    payload.response_url,
-                    json=gen_message(
-                        info, command_args.verbose, command_args.public
-                    )
-                )
-
-        return Response(status_code=status.HTTP_200_OK)
+        try:
+            ticket = await freshdesk.get_ticket(command_args.ticket)
+            logger.info(ticket)
+        except MissingResourceException:
+            return {"text": f"Ticket {command_args.ticket} not found"}
+        return gen_message(ticket, command_args.verbose, command_args.public)
     else:
         if sig_ver == VerificationStatus.BAD_SIGNATURE:
             return {"text": "Slack API call could not be verified."}
