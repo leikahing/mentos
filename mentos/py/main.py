@@ -1,56 +1,20 @@
 from datetime import datetime
-from enum import Enum
 from functools import lru_cache
 from typing import Any, Dict, List
 
 import argparse
-import hashlib
-import hmac
 import logging
-import time
 import urllib.parse
 
 from fastapi import Depends, FastAPI, Request, Response
-from pydantic import BaseModel, BaseSettings, HttpUrl
+from pydantic import BaseSettings, HttpUrl
+
+import mentos.py.slack.util as SlackUtils
 
 from mentos.py.freshdesk.client import FreshDeskClient, MissingResourceException
 from mentos.py.freshdesk.models import TicketInfo
-
-
-class VerificationStatus(Enum):
-    VERIFIED = 1
-    BAD_SIGNATURE = 2
-    OUTDATED_REQUEST = 3
-
-
-def verify_signature(
-    secret: str,
-    body: str,
-    req_sig: str,
-    req_ts: int
-) -> VerificationStatus:
-    """Perform request signature verification.
-
-    Requires the signing secret from your Slack application.
-    The other parameters are the raw request body (from Slack), request
-    signature, and  the request timestamp.
-
-    See https://api.slack.com/authentication/verifying-requests-from-slack"""
-    if abs(int(time.time()) - req_ts) > 300:
-        # request timestamp is old, so ignore this request as it could be
-        # a replay
-        VerificationStatus.OUTDATED_REQUEST
-
-    bs = f"v0:{req_ts}:{body}"
-    hsh = hmac.new(
-            bytes(secret, "utf-8"),
-            msg=bytes(bs, "utf-8"),
-            digestmod=hashlib.sha256).hexdigest()
-
-    signature = f"v0={hsh}"
-    if hmac.compare_digest(signature, req_sig):
-        return VerificationStatus.VERIFIED
-    return VerificationStatus.BAD_SIGNATURE
+from mentos.py.slack.models import SlackPayload
+from mentos.py.slack.util import VerificationStatus
 
 
 class Settings(BaseSettings):
@@ -67,28 +31,6 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
-
-class SlackPayload(BaseModel):
-    """This payload is documented in Slack's command API.
-
-    It ignores some fields that don't particularly matter like whether or not
-    this is running an Enterprise Slack.
-
-    See:
-    https://api.slack.com/interactivity/slash-commands#app_command_handling"""
-    token: str
-    team_id: str
-    team_domain: str
-    channel_id: str
-    channel_name: str
-    user_id: str
-    user_name: str
-    command: str
-    text: str
-    response_url: str
-    trigger_id: str
-    api_app_id: str
 
 
 def gen_message(
@@ -203,7 +145,7 @@ async def ticket_info(
     logger.info(f"x-slack-signature={req_sig}")
     secret = settings.slack_signing_secret
 
-    sig_ver = verify_signature(secret, body, req_sig, req_ts)
+    sig_ver = SlackUtils.verify_signature(secret, body, req_sig, req_ts)
     if sig_ver in (VerificationStatus.VERIFIED,):
         qsd = dict(urllib.parse.parse_qsl(body))
         payload = SlackPayload.parse_obj(qsd)
