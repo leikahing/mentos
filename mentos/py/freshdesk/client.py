@@ -4,7 +4,7 @@ import aiohttp
 
 from async_lru import alru_cache
 
-import mentos.py.freshdesk.models as fdmodels 
+import mentos.py.freshdesk.models as fdmodels
 
 T = TypeVar("T")
 
@@ -51,7 +51,7 @@ class FreshDeskClient:
         return await self._api_fetch(resource, fdmodels.AgentGroup)
 
     @alru_cache
-    async def get_department(self, department_id: int):
+    async def get_department(self, department_id: int) -> fdmodels.Department:
         resource = f"departments/{department_id}"
         return await self._api_fetch(resource, fdmodels.Department)
 

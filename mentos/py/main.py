@@ -11,7 +11,9 @@ from pydantic import BaseSettings, HttpUrl
 
 import mentos.py.slack.util as SlackUtils
 
-from mentos.py.freshdesk.client import FreshDeskClient, MissingResourceException
+from mentos.py.freshdesk.client import (
+    FreshDeskClient, MissingResourceException
+)
 from mentos.py.freshdesk.models import TicketInfo
 from mentos.py.slack.models import SlackPayload
 from mentos.py.slack.util import VerificationStatus

@@ -21,7 +21,7 @@ def verify_signature(
 
     Requires the signing secret from your Slack application.
     The other parameters are the raw request body (from Slack), request
-    signature, and  the request timestamp.
+    signature, and the request timestamp.
 
     See https://api.slack.com/authentication/verifying-requests-from-slack"""
     if abs(int(time.time()) - req_ts) > 300:
