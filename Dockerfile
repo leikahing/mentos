@@ -20,4 +20,4 @@ COPY . .
 EXPOSE 8080
 
 # replace APP_NAME with module name
-CMD ["uvicorn", "mentos.py.main:app", "--port", "8080", "--workers", "2", "--host", "0.0.0.0"]
+CMD ["gunicorn", "mentos.py.main:app", "-w", "4", "-b", "0.0.0.0:8080", "-k", "uvicorn.workers.UvicornWorker"]
