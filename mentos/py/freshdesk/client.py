@@ -46,6 +46,11 @@ class FreshDeskClient:
         return await self._api_fetch(resource, fdmodels.Agent)
 
     @alru_cache
+    async def get_requester(self, requester_id: int) -> fdmodels.Agent:
+        resource = f"requesters/{requester_id}"
+        return await self._api_fetch(resource, fdmodels.Agent)
+
+    @alru_cache
     async def get_agent_group(self, agent_group: int) -> fdmodels.AgentGroup:
         resource = f"groups/{agent_group}"
         return await self._api_fetch(resource, fdmodels.AgentGroup)
@@ -55,7 +60,6 @@ class FreshDeskClient:
         resource = f"departments/{department_id}"
         return await self._api_fetch(resource, fdmodels.Department)
 
-    @alru_cache
     async def get_ticket(self, ticket_id: str) -> fdmodels.TicketInfo:
         resource = f"tickets/{ticket_id}"
         return await self._api_fetch(resource, fdmodels.TicketInfo)

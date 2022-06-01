@@ -1,6 +1,5 @@
-from datetime import datetime
 from functools import lru_cache
-from typing import Any, Dict, List
+from typing import List
 
 import argparse
 import logging
@@ -14,9 +13,9 @@ import mentos.py.slack.util as SlackUtils
 from mentos.py.freshdesk.client import (
     FreshDeskClient, MissingResourceException
 )
-from mentos.py.freshdesk.models import TicketInfo
 from mentos.py.slack.models import SlackPayload
 from mentos.py.slack.util import VerificationStatus
+from mentos.py.util.block import FullBlockCreator
 
 
 class Settings(BaseSettings):
@@ -33,65 +32,6 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
-
-def gen_message(
-    ticket: TicketInfo,
-    verbose: bool = False,
-    private: bool = False
-) -> Dict[str, Any]:
-    divider = {"type": "divider"}
-    header = {
-        "type": "header",
-        "text": {
-            "type": "plain_text",
-            "text": ticket.subject.strip()
-        },
-    }
-
-    def create_date(date: datetime, title: str) -> str:
-        ts = int(date.timestamp())
-        fallback = date.strftime("%c")
-        return f"*{title}:*\n<!date^{ts}^{{date}} {{time}}|{fallback}>"
-
-    created = create_date(ticket.created_at, "Created")
-    updated = create_date(ticket.updated_at, "Updated")
-    due = create_date(ticket.due_by, "Due By")
-
-    date_sections = {
-        "type": "section",
-        "fields": [
-            {
-                "type": "mrkdwn",
-                "text": created
-            },
-            {
-                "type": "mrkdwn",
-                "text": due
-            },
-            {
-                "type": "mrkdwn",
-                "text": updated
-            }
-        ]
-    }
-
-    if verbose:
-        description = {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*Description*:\n{ticket.description_text.strip()}"
-            }
-        }
-        blocks = [header, description, divider, date_sections]
-    else:
-        blocks = [header, divider, date_sections]
-
-    return {
-        "response_type": "in_channel" if not private else "ephemeral",
-        "blocks": blocks
-    }
 
 
 def get_ticket_parser() -> argparse.ArgumentParser:
@@ -159,13 +99,9 @@ async def ticket_info(
 
         parser = get_ticket_parser()
         command_args = parser.parse_args(payload.text.split())
-
-        try:
-            ticket = await freshdesk.get_ticket(command_args.ticket)
-            logger.info(ticket)
-        except MissingResourceException:
-            return {"text": f"Ticket {command_args.ticket} not found"}
-        return gen_message(ticket, command_args.verbose, command_args.private)
+        fbc = FullBlockCreator(freshdesk)
+        blocks = await fbc.gen_ticket_block(command_args.ticket, command_args.verbose, command_args.private)
+        return blocks
     else:
         if sig_ver == VerificationStatus.BAD_SIGNATURE:
             return {"text": "Slack API call could not be verified."}

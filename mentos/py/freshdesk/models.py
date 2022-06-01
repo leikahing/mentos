@@ -1,6 +1,11 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from enum import Enum
+from typing import List, Optional
+
 from pydantic import BaseModel
+
+TicketStatus = Enum("TicketStatus", [("Open", 2), ("Pending", 3), ("Resolved", 4), ("Closed", 5)])
+Priority = Enum("Priority", [("Low", 1), ("Medium", 2), ("High", 3), ("Urgent", 4)])
 
 
 class Requester(BaseModel):
@@ -49,7 +54,6 @@ class TicketInfo(BaseModel):
     sub_category: Optional[str]
     item_category: Optional[str]
     deleted: bool
-    requester: Optional[Requester]
 
 
 class AgentGroup(BaseModel):
@@ -70,5 +74,3 @@ class Department(BaseModel):
     id: int
     name: str
     description: str
-    header_user_id: int
-    prime_user_id: int
