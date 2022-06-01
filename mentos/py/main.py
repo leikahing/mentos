@@ -38,7 +38,7 @@ def get_settings() -> Settings:
 def gen_message(
     ticket: TicketInfo,
     verbose: bool = False,
-    public: bool = False
+    private: bool = False
 ) -> Dict[str, Any]:
     divider = {"type": "divider"}
     header = {
@@ -89,7 +89,7 @@ def gen_message(
         blocks = [header, divider, date_sections]
 
     return {
-        "response_type": "in_channel" if public else "ephemeral",
+        "response_type": "in_channel" if not private else "ephemeral",
         "blocks": blocks
     }
 
@@ -97,7 +97,7 @@ def gen_message(
 def get_ticket_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Parse ticket request")
     parser.add_argument("-v", dest="verbose", action="store_true")
-    parser.add_argument("-p", dest="public", action="store_true")
+    parser.add_argument("-p", dest="private", action="store_true")
     parser.add_argument("ticket")
     return parser
 
@@ -135,7 +135,7 @@ async def ticket_info(
     /COMMAND [-v] [-p] TICKET
 
     * -v - verbose mode, return more info about the ticket
-    * -p - show the information publicly in requesting channel
+    * -p - show the information privately to requester, rather than publicly
     * TICKET - a number/identifier for the FreshDesk ticket"""
 
     body = (await request.body()).decode("utf-8")
@@ -165,7 +165,7 @@ async def ticket_info(
             logger.info(ticket)
         except MissingResourceException:
             return {"text": f"Ticket {command_args.ticket} not found"}
-        return gen_message(ticket, command_args.verbose, command_args.public)
+        return gen_message(ticket, command_args.verbose, command_args.private)
     else:
         if sig_ver == VerificationStatus.BAD_SIGNATURE:
             return {"text": "Slack API call could not be verified."}
