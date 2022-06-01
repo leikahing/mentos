@@ -10,16 +10,15 @@ from pydantic import BaseSettings, HttpUrl
 
 import mentos.py.slack.util as SlackUtils
 
-from mentos.py.freshdesk.client import (
-    FreshDeskClient, MissingResourceException
-)
+from mentos.py.freshdesk.client import FreshDeskClient
 from mentos.py.slack.models import SlackPayload
 from mentos.py.slack.util import VerificationStatus
 from mentos.py.util.block import FullBlockCreator
 
 
 class Settings(BaseSettings):
-    freshdesk_url: HttpUrl
+    freshdesk_api_url: HttpUrl
+    freshdesk_access_url: HttpUrl
     freshdesk_api_key: str
     slack_signing_secret: str
     limit_users: bool = True
@@ -52,7 +51,7 @@ logger.setLevel("DEBUG")
 @app.on_event("startup")
 def startup():
     settings = get_settings()
-    freshdesk.configure(settings.freshdesk_url, settings.freshdesk_api_key)
+    freshdesk.configure(settings.freshdesk_api_url, settings.freshdesk_api_key)
 
 
 @app.on_event("shutdown")
@@ -99,8 +98,12 @@ async def ticket_info(
 
         parser = get_ticket_parser()
         command_args = parser.parse_args(payload.text.split())
-        fbc = FullBlockCreator(freshdesk)
-        blocks = await fbc.gen_ticket_block(command_args.ticket, command_args.verbose, command_args.private)
+        fbc = FullBlockCreator(freshdesk, settings.freshdesk_access_url)
+        blocks = await fbc.gen_ticket_block(
+            command_args.ticket,
+            command_args.verbose,
+            command_args.private
+        )
         return blocks
     else:
         if sig_ver == VerificationStatus.BAD_SIGNATURE:

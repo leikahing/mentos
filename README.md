@@ -11,13 +11,11 @@ This is an application made by personal request - it handles some FreshDesk func
 ```
 SERVER_URL/ticket
 
-Command Arguments: -v -p TICKET_ID
+Command Arguments: -[vp] TICKET_ID
 
 * -v enables verbose mode, which includes additional ticket information
 * -p enables public message mode - the resultant ticket info is publicly displayed in Slack.
 * TICKET_ID is the ticket ID you want from freshdesk
-
-
 ```
 
 ## Configuration
@@ -29,7 +27,8 @@ A full description of the settings is as follows...
 
 | Setting Name | Description |
 | ------ | ------ |
-| `FRESHDESK_URL` | Your subdomain for freshservice.com |
+| `FRESHDESK_API_URL` | Your URL to access to the FreshDesk API | 
+| `FRESHDESK_ACCESS_URL` | Your URL to access FreshDesk itself (e.g. for tickets) | 
 | `FRESHDESK_API_KEY` | API key to access the Freshdesk API |
 | `SLACK_SIGNING_SECRET` | The signing secret from your Slack app management page for verifying that messages are actually coming from Slack |
 | `LIMIT_USERS` | Defaults to `true` if not specified. This allows you to specify `APPROVED_USERS` and provide a list of users who can send commands to this app |

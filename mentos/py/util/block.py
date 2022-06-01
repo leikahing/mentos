@@ -15,8 +15,9 @@ logger = logging.getLogger("uvicorn")
 
 
 class FullBlockCreator:
-    def __init__(self, freshdesk: FreshDeskClient):
+    def __init__(self, freshdesk: FreshDeskClient, access_url: str):
         self.client = freshdesk
+        self.access_url = access_url
 
     def create_date(self, date: datetime, title: str) -> str:
         ts = int(date.timestamp())
@@ -58,10 +59,19 @@ class FullBlockCreator:
         submitted = self.create_date(ticket.created_at, "Date Submitted")
         updated = self.create_date(ticket.updated_at, "Last Update")
         status = fdmodels.TicketStatus(ticket.status).name
+        ticket_url = f"{self.access_url}/{ticket_id}"
+        if ticket.type.lower() == "incident":
+            ident = f"IN-{ticket_id}"
+        else:
+            ident = f"SR-{ticket_id}"
 
         info_sections = {
             "type": "section",
             "fields": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Ticket:*\n<{ticket_url}|{ident}>"
+                },
                 # ticket URL goes here...
                 {
                     "type": "mrkdwn",
@@ -103,4 +113,4 @@ class FullBlockCreator:
             "response_type": "in_channel" if not ephemeral else "ephemeral",
             "blocks": blocks
         }
-        return json.dumps(final, indent=3)
+        return json.dumps(final)
