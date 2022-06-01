@@ -27,7 +27,7 @@ def verify_signature(
     if abs(int(time.time()) - req_ts) > 300:
         # request timestamp is old, so ignore this request as it could be
         # a replay
-        VerificationStatus.OUTDATED_REQUEST
+        return VerificationStatus.OUTDATED_REQUEST
 
     bs = f"v0:{req_ts}:{body}"
     hsh = hmac.new(
