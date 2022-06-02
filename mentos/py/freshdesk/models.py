@@ -16,6 +16,17 @@ class Requester(BaseModel):
     email: str
 
 
+class Conversation(BaseModel):
+    created_at: datetime
+    updated_at: datetime
+    body: str
+    body_text: str
+    private: bool = False
+    user_id: int
+    support_email: Optional[str]
+    ticket_id: int
+
+
 class TicketInfo(BaseModel):
     """
     Model for the FreshDesk API's ticket info. Doesn't fully capture everything
