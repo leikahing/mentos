@@ -14,7 +14,7 @@ class Requester(BaseModel):
     id: int
     first_name: str
     last_name: str
-    email: str
+    primary_email: str
 
 
 class Conversation(BaseModel):

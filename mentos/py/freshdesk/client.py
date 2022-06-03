@@ -63,9 +63,9 @@ class FreshDeskClient:
         return await self._api_fetch_single(resource, fdmodels.Agent)
 
     @alru_cache
-    async def get_requester(self, requester_id: int) -> fdmodels.Agent:
+    async def get_requester(self, requester_id: int) -> fdmodels.Requester:
         resource = f"requesters/{requester_id}"
-        return await self._api_fetch_single(resource, fdmodels.Agent)
+        return await self._api_fetch_single(resource, fdmodels.Requester)
 
     @alru_cache
     async def get_agent_group(self, agent_group: int) -> fdmodels.AgentGroup:
