@@ -1,8 +1,8 @@
 import asyncio
+import math
 import re
 
 from datetime import datetime
-from operator import attrgetter
 from typing import Any, Dict
 
 from mentos.py.freshdesk.client import (
@@ -13,6 +13,8 @@ import mentos.py.freshdesk.models as fdmodels
 
 
 class FullBlockCreator:
+    CONVERSATIONS_PER_PAGE: int = 30
+
     def __init__(self, freshdesk: FreshDeskClient, access_url: str):
         self.client = freshdesk
         self.access_url = access_url
@@ -31,6 +33,29 @@ class FullBlockCreator:
         fallback = date.strftime("%c")
         return f"*{title}:*\n<!date^{ts}^{{date}} {{time}}|{fallback}>"
 
+    async def get_last_public_reply(
+        self,
+        ticket_id: str
+    ) -> fdmodels.Conversation:
+        """Returns last public reply in a ticket conversation."""
+        page = 1
+        first_convos = await self.client.get_conversations(ticket_id, page)
+        remaining_replies = first_convos.meta.count - self.CONVERSATIONS_PER_PAGE
+        remaining_pages = math.ceil(remaining_replies/self.CONVERSATIONS_PER_PAGE)
+
+        start = 2
+        range_end = start + remaining_pages
+        futures = [self.client.get_conversations(ticket_id, p) for p in reversed(range(start, range_end))]
+        convos = await asyncio.gather(*futures)
+        convos.append(first_convos)
+
+        for c in convos:
+            latest_reply = next((r for r in c.conversations if not r.private), None)
+            if not latest_reply:
+                continue
+
+        return latest_reply
+
     async def gen_ticket_block(
         self,
         ticket_id: str,
@@ -46,11 +71,11 @@ class FullBlockCreator:
 
         # tickets provide a bunch of identifiers that need to be reified
         # into additional objects
-        agent, req, group, convos = await asyncio.gather(
+        agent, req, group, last_public = await asyncio.gather(
             self.client.get_agent(ticket.responder_id),
             self.client.get_requester(ticket.requester_id),
             self.client.get_agent_group(ticket.group_id),
-            self.client.get_conversations(ticket_id)
+            self.get_last_public_reply(ticket_id)
         )
 
         header = {
@@ -115,10 +140,6 @@ class FullBlockCreator:
             "color": "#ff9933",
             "text": self.format_body(ticket.description_text)
         }
-
-        # for last update, sort the conversations by created (probably?)
-        replies = sorted(convos, key=attrgetter("created_at"), reverse=True)
-        last_public = next((r for r in replies if not r.private), None)
 
         if last_public:
             if last_public.user_id == ticket.requester_id:

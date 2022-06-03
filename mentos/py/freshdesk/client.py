@@ -46,8 +46,7 @@ class FreshDeskClient:
         gen_type: Type[T]
     ) -> List[T]:
         js = await self._api_fetch(resource)
-        inner_list = next(iter(js.values()))
-        return [gen_type(**x) for x in inner_list]
+        return gen_type(**js)
 
     async def _api_fetch_single(
         self,
@@ -79,10 +78,11 @@ class FreshDeskClient:
 
     async def get_conversations(
         self,
-        ticket_id: str
-    ) -> List[fdmodels.Conversation]:
+        ticket_id: str,
+        page: int = 1
+    ) -> fdmodels.Conversations:
         resource = f"tickets/{ticket_id}/conversations"
-        return await self._api_fetch_list(resource, fdmodels.Conversation)
+        return await self._api_fetch_list(resource, fdmodels.Conversations)
 
     async def get_ticket(self, ticket_id: str) -> fdmodels.TicketInfo:
         resource = f"tickets/{ticket_id}"

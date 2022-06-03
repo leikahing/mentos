@@ -16,6 +16,8 @@ class Requester(BaseModel):
     last_name: str
     primary_email: str
 
+class Meta(BaseModel):
+    count: int
 
 class Conversation(BaseModel):
     created_at: datetime
@@ -26,6 +28,10 @@ class Conversation(BaseModel):
     user_id: int
     support_email: Optional[str]
     ticket_id: int
+
+class Conversations(BaseModel):
+    conversations: List[Conversation]
+    meta: Meta
 
 
 class TicketInfo(BaseModel):
