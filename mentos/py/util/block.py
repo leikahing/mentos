@@ -46,11 +46,10 @@ class FullBlockCreator:
 
         # tickets provide a bunch of identifiers that need to be reified
         # into additional objects
-        agent, req, group, dept, convos = await asyncio.gather(
+        agent, req, group, convos = await asyncio.gather(
             self.client.get_agent(ticket.responder_id),
             self.client.get_requester(ticket.requester_id),
             self.client.get_agent_group(ticket.group_id),
-            self.client.get_department(ticket.department_id),
             self.client.get_conversations(ticket_id)
         )
 
@@ -98,7 +97,7 @@ class FullBlockCreator:
                 },
                 {
                     "type": "mrkdwn",
-                    "text": f"*Assigned Tech Group:*\n{dept.name}"
+                    "text": f"*Assigned Tech Group:*\n{group.name}"
                 },
                 {
                     "type": "mrkdwn",
