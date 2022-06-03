@@ -12,7 +12,8 @@ class Requester(BaseModel):
     """This is the 'requester' block that is returned when tickets are
     requested with the '?include=requester' param"""
     id: int
-    name: str
+    first_name: str
+    last_name: str
     email: str
 
 

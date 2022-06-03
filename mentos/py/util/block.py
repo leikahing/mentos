@@ -48,7 +48,7 @@ class FullBlockCreator:
         # into additional objects
         agent, req, group, dept, convos = await asyncio.gather(
             self.client.get_agent(ticket.responder_id),
-            self.client.get_agent(ticket.requester_id),
+            self.client.get_requester(ticket.requester_id),
             self.client.get_agent_group(ticket.group_id),
             self.client.get_department(ticket.department_id),
             self.client.get_conversations(ticket_id)
