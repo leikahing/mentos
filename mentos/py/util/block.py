@@ -69,7 +69,7 @@ class FullBlockCreator:
         status = fdmodels.TicketStatus(ticket.status).name
         ticket_url = f"{self.access_url}/{ticket_id}"
         if ticket.type.lower() == "incident":
-            ident = f"IN-{ticket_id}"
+            ident = f"INC-{ticket_id}"
         else:
             ident = f"SR-{ticket_id}"
 
