@@ -91,7 +91,9 @@ async def ticket_info(
         qsd = dict(urllib.parse.parse_qsl(body))
         payload = SlackPayload.parse_obj(qsd)
 
-        if payload.user_name not in settings.approved_users:
+        if (settings.limit_users
+            and payload.user_name not in settings.approved_users
+        ):
             return {
                 "text": f"Sorry, user {payload.user_name} isn't authorized."
             }
