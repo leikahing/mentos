@@ -13,6 +13,10 @@ class MissingResourceException(Exception):
     """Exception for some missing API resource"""
 
 
+class ServerError(Exception):
+    """Exception for server-level issues (e.g. HTTP 5xx)"""
+
+
 class FreshDeskClient:
     base_url: str = None
     api_key: str = None
@@ -36,6 +40,8 @@ class FreshDeskClient:
         ) as rsp:
             if 400 <= rsp.status < 500:
                 raise MissingResourceException
+            elif rsp.status >= 500:
+                raise ServerError
 
             js = await rsp.json()
             return js

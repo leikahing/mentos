@@ -6,7 +6,7 @@ from operator import attrgetter
 from typing import Any, Dict
 
 from mentos.py.freshdesk.client import (
-    FreshDeskClient, MissingResourceException
+    FreshDeskClient, MissingResourceException, ServerError
 )
 
 import mentos.py.freshdesk.models as fdmodels
@@ -43,6 +43,8 @@ class FullBlockCreator:
             ticket = await self.client.get_ticket(ticket_id)
         except MissingResourceException:
             return {"text": f"Ticket {ticket_id} not found"}
+        except ServerError:
+            return {"text": f"FreshDesk server encountered issues. Try again later."}
 
         # tickets provide a bunch of identifiers that need to be reified
         # into additional objects
