@@ -171,7 +171,7 @@ class FullBlockCreator:
             reply_attachment = {
                 "mrkdwn_in": ["text"],
                 "color": "#db3236",
-                "text": "**No replies to show**"
+                "text": "*No replies to show*"
             }
 
         blocks = [header, divider, info_sections, divider]

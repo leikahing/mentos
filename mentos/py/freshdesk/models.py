@@ -1,8 +1,9 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel
+
 
 TicketStatus = Enum(
     "TicketStatus",
@@ -10,8 +11,8 @@ TicketStatus = Enum(
      ("Pending", 3),
      ("Resolved", 4),
      ("Closed", 5),
-     ("Suspended", 6),
-     ("New / Unassigned", 7),
+     ("New / Unassigned", 6),
+     ("Suspended", 7),
      ("Pending / Unassigned", 8)]
 )
 Priority = Enum("Priority", [("Low", 1), ("Medium", 2), ("High", 3), ("Urgent", 4)])
@@ -39,7 +40,7 @@ class Conversation(BaseModel):
 
 
 class RequestedItems(BaseModel):
-    custom_fields: Dict[str, str]
+    custom_fields: Dict[str, Optional[str]]
 
 
 class TicketInfo(BaseModel):
