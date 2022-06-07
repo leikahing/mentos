@@ -83,6 +83,13 @@ class FreshDeskClient:
         resource = f"departments/{department_id}"
         return await self._api_fetch_single(resource, fdmodels.Department)
 
+    async def get_requested_items(
+        self,
+        ticket_id: str
+    ) -> List[fdmodels.RequestedItems]:
+        resource = f"tickets/{ticket_id}/requested_items"
+        return await self._api_fetch_list(resource, fdmodels.RequestedItems)
+
     async def get_conversations(
         self,
         ticket_id: str

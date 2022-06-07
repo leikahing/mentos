@@ -3,7 +3,7 @@ import re
 
 from datetime import datetime
 from operator import attrgetter
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from mentos.py.freshdesk.client import (
     FreshDeskClient, MissingResourceException, ServerError
@@ -25,6 +25,15 @@ class FullBlockCreator:
         # it's just a linebreak.
         lines = re.split(r"\s{2,}", text)
         return "\n\n".join(lines)
+
+    def format_sr_info(self, req_info: List[fdmodels.RequestedItems]):
+        text = []
+        print(type(req_info))
+        for ri in req_info:
+            for k, v in ri.custom_fields.items():
+                key = k.replace("_", " ").title()
+                text.append(f"*{key}*: {v}")
+        return "\n".join(text)
 
     def create_date(self, date: datetime, title: str) -> str:
         ts = int(date.timestamp())
@@ -48,11 +57,13 @@ class FullBlockCreator:
 
         # tickets provide a bunch of identifiers that need to be reified
         # into additional objects
-        agent, req, group, convos = await asyncio.gather(
+        agent, req, group, convos, req_items = await asyncio.gather(
             self.client.get_agent(ticket.responder_id),
             self.client.get_requester(ticket.requester_id),
             self.client.get_agent_group(ticket.group_id),
-            self.client.get_conversations(ticket_id)
+            self.client.get_conversations(ticket_id),
+            self.client.get_requested_items(ticket_id),
+            return_exceptions=True
         )
 
         header = {
@@ -66,12 +77,30 @@ class FullBlockCreator:
 
         submitted = self.create_date(ticket.created_at, "Date Submitted")
         updated = self.create_date(ticket.updated_at, "Last Update")
-        status = fdmodels.TicketStatus(ticket.status).name
+        try:
+            status = fdmodels.TicketStatus(ticket.status).name
+        except ValueError:
+            # There are custom statuses that could be unique to the user
+            # but not visible from the API
+            status = f"Custom Status - {ticket.status}"
         ticket_url = f"{self.access_url}/{ticket_id}"
-        if ticket.type.lower() == "incident":
+
+        if ticket.type is fdmodels.TicketType.Incident:
             ident = f"INC-{ticket_id}"
+            description = {
+                "mrkdwn_in": ["pretext", "text"],
+                "pretext": "*Description*",
+                "color": "#ff9933",
+                "text": self.format_body(ticket.description_text)
+            }
         else:
             ident = f"SR-{ticket_id}"
+            description = {
+                "mrkdwn_in": ["pretext", "text"],
+                "pretext": "*Service Request - Requested Items*",
+                "color": "#ff9933",
+                "text": self.format_sr_info(req_items)
+            }
 
         info_sections = {
             "type": "section",
@@ -82,6 +111,11 @@ class FullBlockCreator:
                 }
             ]
         }
+
+        if isinstance(agent, MissingResourceException):
+            agent_text = "No Agent Assigned"
+        else:
+            agent_text = f"{agent.first_name} {agent.last_name}"
 
         if verbose:
             info_sections["fields"].extend([
@@ -107,16 +141,9 @@ class FullBlockCreator:
                 },
                 {
                     "type": "mrkdwn",
-                    "text": f"*Assigned Tech:*\n{agent.first_name} {agent.last_name}"
+                    "text": f"*Assigned Tech:*\n{agent_text}"
                 }
             ])
-
-        description = {
-            "mrkdwn_in": ["pretext", "text"],
-            "pretext": "*Description*",
-            "color": "#ff9933",
-            "text": self.format_body(ticket.description_text)
-        }
 
         # for last update, sort the conversations by created (probably?)
         replies = sorted(convos, key=attrgetter("created_at"), reverse=True)
