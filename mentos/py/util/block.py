@@ -112,10 +112,18 @@ class FullBlockCreator:
             ]
         }
 
+        # sometimes stuff doesn't have groups or agents, either
+        # because they're unassigned or because groups aren't
+        # used
         if isinstance(agent, MissingResourceException):
             agent_text = "No Agent Assigned"
         else:
             agent_text = f"{agent.first_name} {agent.last_name}"
+
+        if isinstance(group, MissingResourceException):
+            group_text = "No Assigned Group"
+        else:
+            group_text = group.name
 
         if verbose:
             info_sections["fields"].extend([
@@ -133,7 +141,7 @@ class FullBlockCreator:
                 },
                 {
                     "type": "mrkdwn",
-                    "text": f"*Assigned Tech Group:*\n{group.name}"
+                    "text": f"*Assigned Tech Group:*\n{group_text}"
                 },
                 {
                     "type": "mrkdwn",
