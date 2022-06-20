@@ -10,11 +10,9 @@ TicketStatus = Enum(
     [("Open", 2),
      ("Pending", 3),
      ("Resolved", 4),
-     ("Closed", 5),
-     ("New / Unassigned", 6),
-     ("Suspended", 7),
-     ("Pending / Unassigned", 8)]
+     ("Closed", 5)]
 )
+
 Priority = Enum("Priority", [("Low", 1), ("Medium", 2), ("High", 3), ("Urgent", 4)])
 TicketType = Enum("TicketType", [("Incident", "Incident"), ("Service Request", "Service Request")])
 

@@ -11,6 +11,7 @@ from pydantic import BaseSettings, HttpUrl
 import mentos.py.slack.util as SlackUtils
 
 from mentos.py.freshdesk.client import FreshDeskClient
+from mentos.py.freshdesk.models import TicketStatus
 from mentos.py.slack.models import SlackPayload
 from mentos.py.slack.util import VerificationStatus
 from mentos.py.util.block import FullBlockCreator
@@ -23,6 +24,9 @@ class Settings(BaseSettings):
     slack_signing_secret: str
     limit_users: bool = True
     approved_users: List[str]
+
+    # whether to fetch custom ticket statuses from freshdesk
+    init_custom_statuses: bool = False
 
     class Config:
         env_file = ".env"
@@ -43,15 +47,24 @@ def get_ticket_parser() -> argparse.ArgumentParser:
 
 app = FastAPI()
 freshdesk = FreshDeskClient()
+ticket_statuses = TicketStatus
 
 logger = logging.getLogger("uvicorn")
 logger.setLevel("DEBUG")
 
 
 @app.on_event("startup")
-def startup():
+async def startup():
     settings = get_settings()
     freshdesk.configure(settings.freshdesk_api_url, settings.freshdesk_api_key)
+
+    if settings.init_custom_statuses:
+        logger.info("[startup] INIT_CUSTOM_STATUSES enabled, populating custom ticket statuses")
+        statuses = await freshdesk.get_ticket_statuses()
+        if statuses:
+            global ticket_statuses
+            ticket_statuses = statuses
+            logger.info("[startup] Custom ticket statuses initialized")
 
 
 @app.on_event("shutdown")
@@ -92,15 +105,18 @@ async def ticket_info(
         payload = SlackPayload.parse_obj(qsd)
 
         if (settings.limit_users
-            and payload.user_name not in settings.approved_users
-        ):
+                and payload.user_name not in settings.approved_users):
             return {
                 "text": f"Sorry, user {payload.user_name} isn't authorized."
             }
 
         parser = get_ticket_parser()
         command_args = parser.parse_args(payload.text.split())
-        fbc = FullBlockCreator(freshdesk, settings.freshdesk_access_url)
+        fbc = FullBlockCreator(
+            freshdesk,
+            settings.freshdesk_access_url,
+            ticket_statuses
+        )
         blocks = await fbc.gen_ticket_block(
             command_args.ticket,
             command_args.verbose,

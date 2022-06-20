@@ -2,6 +2,7 @@ import asyncio
 import re
 
 from datetime import datetime
+from enum import Enum
 from operator import attrgetter
 from typing import Any, Dict, List
 
@@ -13,9 +14,15 @@ import mentos.py.freshdesk.models as fdmodels
 
 
 class FullBlockCreator:
-    def __init__(self, freshdesk: FreshDeskClient, access_url: str):
+    def __init__(
+        self,
+        freshdesk: FreshDeskClient,
+        access_url: str,
+        ticket_statuses: Enum = fdmodels.TicketStatus
+    ):
         self.client = freshdesk
         self.access_url = access_url
+        self.statuses = ticket_statuses
 
     def format_body(self, text: str) -> str:
         """Reply bodies get some rather ugly formatting so this tries to do some
@@ -53,7 +60,7 @@ class FullBlockCreator:
         except MissingResourceException:
             return {"text": f"Ticket {ticket_id} not found"}
         except ServerError:
-            return {"text": f"FreshDesk server encountered issues. Try again later."}
+            return {"text": "FreshDesk server encountered issues. Try again later."}
 
         # tickets provide a bunch of identifiers that need to be reified
         # into additional objects
@@ -78,10 +85,8 @@ class FullBlockCreator:
         submitted = self.create_date(ticket.created_at, "Date Submitted")
         updated = self.create_date(ticket.updated_at, "Last Update")
         try:
-            status = fdmodels.TicketStatus(ticket.status).name
+            status = self.statuses(ticket.status).name
         except ValueError:
-            # There are custom statuses that could be unique to the user
-            # but not visible from the API
             status = f"Custom Status - {ticket.status}"
         ticket_url = f"{self.access_url}/{ticket_id}"
 

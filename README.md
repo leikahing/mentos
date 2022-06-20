@@ -33,6 +33,7 @@ A full description of the settings is as follows...
 | `SLACK_SIGNING_SECRET` | The signing secret from your Slack app management page for verifying that messages are actually coming from Slack |
 | `LIMIT_USERS` | Defaults to `true` if not specified. This allows you to specify `APPROVED_USERS` and provide a list of users who can send commands to this app |
 | `APPROVED_USERS` | A JSON list of usernames that are allowed to use this bot. Enforced if `LIMIT_USERS=true` |
+| `INIT_CUSTOM_STATUSES` | Defaults to `false`. If `true`, uses custom ticket statuses the user may have defined in Freshdesk |
 
 
 ## Installing and Running - Production

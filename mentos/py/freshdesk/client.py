@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Type, TypeVar
+from enum import Enum
+from typing import Any, Dict, List, Optional, Type, TypeVar
 
 import aiohttp
 
@@ -82,6 +83,18 @@ class FreshDeskClient:
     async def get_department(self, department_id: int) -> fdmodels.Department:
         resource = f"departments/{department_id}"
         return await self._api_fetch_single(resource, fdmodels.Department)
+
+    async def get_ticket_statuses(self) -> Optional[Enum]:
+        resource = "ticket_fields"
+        raw = await self._api_fetch(resource)
+        sub = next(
+            (d for d in raw["ticket_fields"] if d["name"] == "status"),
+            None)
+        if sub:
+            statuses = [(v[0], int(k)) for k, v in sub["choices"].items()]
+            return Enum("TicketStatus", statuses)
+        else:
+            return None
 
     async def get_requested_items(
         self,
