@@ -120,7 +120,9 @@ class FullBlockCreator:
         # sometimes stuff doesn't have groups or agents, either
         # because they're unassigned or because groups aren't
         # used
+        agentless = False
         if isinstance(agent, MissingResourceException):
+            agentless = True
             agent_text = "No Agent Assigned"
         else:
             agent_text = f"{agent.first_name} {agent.last_name}"
@@ -166,14 +168,12 @@ class FullBlockCreator:
             if last_public.user_id == ticket.requester_id:
                 reply_from = f"Client: {req.first_name} {req.last_name}"
                 color = "#439fe0"
+            elif not agentless and last_public.user_id == agent.id:
+                reply_from = f"Tech: {agent.first_name} {agent.last_name}"
+                color = "#3cba54"
             else:
-                try:
-                    if last_public.user_id == agent.id:
-                        reply_from = f"Tech: {agent.first_name} {agent.last_name}"
-                        color = "#3cba54"
-                except MissingResourceException:
-                    reply_from = "CC"
-                    color = "#f4c20d"
+                reply_from = "CC"
+                color = "#f4c20d"
 
             reply_attachment = {
                 "mrkdwn_in": ["pretext", "text"],
