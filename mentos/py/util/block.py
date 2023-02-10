@@ -166,12 +166,14 @@ class FullBlockCreator:
             if last_public.user_id == ticket.requester_id:
                 reply_from = f"Client: {req.first_name} {req.last_name}"
                 color = "#439fe0"
-            elif last_public.user_id == agent.id:
-                reply_from = f"Tech: {agent.first_name} {agent.last_name}"
-                color = "#3cba54"
             else:
-                reply_from = "CC"
-                color = "#f4c20d"
+                try:
+                    if last_public.user_id == agent.id:
+                        reply_from = f"Tech: {agent.first_name} {agent.last_name}"
+                        color = "#3cba54"
+                except MissingResourceException:
+                    reply_from = "CC"
+                    color = "#f4c20d"
 
             reply_attachment = {
                 "mrkdwn_in": ["pretext", "text"],
