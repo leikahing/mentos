@@ -21,9 +21,9 @@ class Requester(BaseModel):
     """This is the 'requester' block that is returned when tickets are
     requested with the '?include=requester' param"""
     id: int
-    first_name: str
-    last_name: str
-    primary_email: str
+    first_name: Optional[str] = ""
+    last_name: Optional[str] = ""
+    primary_email: Optional[str] = ""
 
 
 class Conversation(BaseModel):

@@ -132,6 +132,11 @@ class FullBlockCreator:
         else:
             group_text = group.name
 
+        if req:
+            requester = f"Client:*\n{req.first_name} {req.last_name}"
+        else:
+            requester = f"Client: Unknown"
+
         if verbose:
             info_sections["fields"].extend([
                 {
@@ -140,7 +145,7 @@ class FullBlockCreator:
                 },
                 {
                     "type": "mrkdwn",
-                    "text": f"*Client:*\n{req.first_name} {req.last_name}"
+                    "text": requester
                 },
                 {
                     "type": "mrkdwn",
@@ -166,7 +171,7 @@ class FullBlockCreator:
 
         if last_public:
             if last_public.user_id == ticket.requester_id:
-                reply_from = f"Client: {req.first_name} {req.last_name}"
+                reply_from = requester
                 color = "#439fe0"
             elif not agentless and last_public.user_id == agent.id:
                 reply_from = f"Tech: {agent.first_name} {agent.last_name}"
