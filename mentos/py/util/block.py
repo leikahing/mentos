@@ -133,9 +133,9 @@ class FullBlockCreator:
             group_text = group.name
 
         if req:
-            requester = f"Client:*\n{req.first_name} {req.last_name}"
+            requester = f"*Client:*\n{req.first_name} {req.last_name}"
         else:
-            requester = f"Client: Unknown"
+            requester = f"*Client*: Unknown"
 
         if verbose:
             info_sections["fields"].extend([
