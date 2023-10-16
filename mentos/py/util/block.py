@@ -10,12 +10,12 @@ from mentos.py.freshdesk.client import (
     FreshDeskClient, MissingResourceException, ServerError
 )
 
-from mentos.py.freshdesk.models.fdmodels import TicketStatus, TicketType
+from mentos.py.freshdesk.models import TicketStatus, TicketType
 import mentos.py.freshdesk.models as fdmodels
 
 
 class FullBlockCreator:
-    ticket_map: ClassVar(dict[Enum, str]) = {
+    ticket_map = {
         TicketType.Case: "CASE",
         TicketType.Incident: "INC",
         TicketType.Request: "REQ",
