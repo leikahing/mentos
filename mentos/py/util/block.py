@@ -4,21 +4,28 @@ import re
 from datetime import datetime
 from enum import Enum
 from operator import attrgetter
-from typing import Any, Dict, List
+from typing import Any, ClassVar, Dict, List
 
 from mentos.py.freshdesk.client import (
     FreshDeskClient, MissingResourceException, ServerError
 )
 
+from mentos.py.freshdesk.models.fdmodels import TicketStatus, TicketType
 import mentos.py.freshdesk.models as fdmodels
 
 
 class FullBlockCreator:
+    ticket_map: ClassVar(dict[Enum, str]) = {
+        TicketType.Case: "CASE",
+        TicketType.Incident: "INC",
+        TicketType.Request: "REQ",
+        TicketType["Service Request"]: "SR",
+    }
     def __init__(
         self,
         freshdesk: FreshDeskClient,
         access_url: str,
-        ticket_statuses: Enum = fdmodels.TicketStatus
+        ticket_statuses: Enum = TicketStatus
     ):
         self.client = freshdesk
         self.access_url = access_url
@@ -90,19 +97,27 @@ class FullBlockCreator:
             status = f"Custom Status - {ticket.status}"
         ticket_url = f"{self.access_url}/{ticket_id}"
 
-        if ticket.type is fdmodels.TicketType.Incident:
-            ident = f"INC-{ticket_id}"
+        key_type = FullBlockCreator.ticket_map[ticket.type]
+        ident = f"{key_type}-{ticket_id}"
+        if ticket.type in [TicketType.Incident]:
             description = {
                 "mrkdwn_in": ["pretext", "text"],
                 "pretext": "*Description*",
                 "color": "#ff9933",
                 "text": self.format_body(ticket.description_text)
             }
-        else:
-            ident = f"SR-{ticket_id}"
+        elif ticket.type in [TicketType.Case]:
             description = {
                 "mrkdwn_in": ["pretext", "text"],
-                "pretext": "*Service Request - Requested Items*",
+                "pretext": "*Case Description*",
+                "color": "#ff9933",
+                "text": self.format_body(ticket.description_text)
+            }
+        else:
+            pretext_name = "Request" if ticket.type == TicketType.Request else "Service Request"
+            description = {
+                "mrkdwn_in": ["pretext", "text"],
+                "pretext": f"*{pretext_name} - Requested Items*",
                 "color": "#ff9933",
                 "text": self.format_sr_info(req_items)
             }

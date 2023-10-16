@@ -14,7 +14,11 @@ TicketStatus = Enum(
 )
 
 Priority = Enum("Priority", [("Low", 1), ("Medium", 2), ("High", 3), ("Urgent", 4)])
-TicketType = Enum("TicketType", [("Incident", "Incident"), ("Service Request", "Service Request")])
+TicketType = Enum("TicketType", [
+     ("Incident", "Incident"),
+     ("Service Request", "Service Request"),
+     ("Request", "Request"),
+     ("Case", "Case")])
 
 
 class Requester(BaseModel):
