@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional, Type, TypeVar
 
 import aiohttp
 
+import logging
+
 from async_lru import alru_cache
 
 import mentos.py.freshdesk.models as fdmodels
@@ -59,9 +61,13 @@ class FreshDeskClient:
     async def _api_fetch_single(
         self,
         resource: str,
-        gen_type: Type[T]
+        gen_type: Type[T],
+        log: bool = False
     ) -> T:
         js = await self._api_fetch(resource)
+        if log:
+            logger = logging.getLogger("freshdesk_client")
+            logger.info(f"[api_fetch] {js.values()}")
         return gen_type(**next(iter(js.values())))
 
     @alru_cache
@@ -77,7 +83,7 @@ class FreshDeskClient:
     @alru_cache
     async def get_agent_group(self, agent_group: int) -> fdmodels.AgentGroup:
         resource = f"groups/{agent_group}"
-        return await self._api_fetch_single(resource, fdmodels.AgentGroup)
+        return await self._api_fetch_single(resource, fdmodels.AgentGroup, True)
 
     @alru_cache
     async def get_department(self, department_id: int) -> fdmodels.Department:

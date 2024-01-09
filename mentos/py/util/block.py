@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 
 from datetime import datetime
@@ -145,6 +146,9 @@ class FullBlockCreator:
         if isinstance(group, MissingResourceException):
             group_text = "No Assigned Group"
         else:
+            logger = logging.getLogger("block-creator")
+            logger.setLevel("DEBUG")
+            logger.info(f"[group] Group looks like {group}")
             group_text = group.name
 
         if req:
