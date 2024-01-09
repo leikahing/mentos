@@ -88,7 +88,7 @@ class TicketInfo(BaseModel):
 class AgentGroup(BaseModel):
     id: int
     name: str
-    description: str
+    description: Optional[str]
 
 
 class Agent(BaseModel):
