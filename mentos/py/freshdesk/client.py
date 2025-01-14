@@ -85,13 +85,13 @@ class FreshDeskClient:
         return await self._api_fetch_single(resource, fdmodels.Department)
 
     async def get_ticket_statuses(self) -> Optional[Enum]:
-        resource = "ticket_fields"
+        resource = "ticket_form_fields"
         raw = await self._api_fetch(resource)
         sub = next(
             (d for d in raw["ticket_fields"] if d["name"] == "status"),
             None)
         if sub:
-            statuses = [(v[0], int(k)) for k, v in sub["choices"].items()]
+            statuses = [(x["value"], x["id"]) for x in sub["choices"]]
             return Enum("TicketStatus", statuses)
         else:
             return None
